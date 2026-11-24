@@ -50,6 +50,8 @@ export default function LoginPage() {
       return
     }
 
+    localStorage.setItem('tymiy_last_email', authData.user.email || email.trim())
+
     const redirectPath = getRedirectPathByRole(profile.role)
     router.push(redirectPath)
     router.refresh()

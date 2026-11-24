@@ -17,6 +17,11 @@ export default function SessionExpiredModal() {
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        if (session?.user.email) {
+          localStorage.setItem('tymiy_last_email', session.user.email)
+          setEmail(session.user.email)
+          setShow(false)
+        }
         // Session expired or signed out unexpectedly
         if (event === 'TOKEN_REFRESHED' && !session) {
           await showModal()
@@ -56,22 +61,28 @@ export default function SessionExpiredModal() {
     setLoading(true)
     setError(null)
 
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
+    try {
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      })
 
-    if (signInError) {
-      setError('Password salah. Coba lagi.')
+      if (signInError) {
+        setError(signInError.code === 'invalid_credentials'
+          ? 'Email atau kata sandi tidak sesuai. Periksa kembali keduanya.'
+          : `Gagal masuk: ${signInError.message}`)
+        return
+      }
+
+      localStorage.setItem('tymiy_last_email', data.user?.email || email.trim())
+      setShow(false)
+      setPassword('')
+      router.refresh()
+    } catch {
+      setError('Tidak dapat terhubung. Periksa koneksi internet lalu coba lagi.')
+    } finally {
       setLoading(false)
-      return
     }
-
-    // Success - close modal & refresh page data
-    setShow(false)
-    setPassword('')
-    router.refresh()
-    setLoading(false)
   }
 
   async function handleLogout() {
@@ -126,16 +137,22 @@ export default function SessionExpiredModal() {
 
           {/* Form */}
           <form onSubmit={handleReauth} className="space-y-4">
-            {/* Email (read-only) */}
+            {/* Editable fallback for sessions created before email caching */}
             <div className="space-y-1">
               <label
                 className="text-label-sm px-1"
                 style={{ color: '#45464d' }}
               >
-                Email Admin
+                Email
               </label>
-              <div
-                className="h-10 px-4 rounded-lg flex items-center cursor-not-allowed text-body-md"
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                autoComplete="username"
+                placeholder="Masukkan email akun"
+                className="w-full h-10 px-4 rounded-lg text-body-md"
                 style={{
                   backgroundColor: '#faf2eb',
                   borderWidth: '1px',
@@ -143,9 +160,7 @@ export default function SessionExpiredModal() {
                   borderStyle: 'solid',
                   color: '#45464d',
                 }}
-              >
-                {email || 'Loading...'}
-              </div>
+              />
             </div>
 
             {/* Password */}
@@ -158,6 +173,7 @@ export default function SessionExpiredModal() {
               </label>
               <input
                 type="password"
+                autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
